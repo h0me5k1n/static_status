@@ -16,22 +16,30 @@ MY_AUTOREFRESH="0"
 
 # Shortcut to place the configuration file in a folder.
 # Save it without / at the end.
-MY_STATUS_CONFIG_DIR="$HOME/status"
+MY_STATUS_CONFIG_DIR="$BASE_PATH/cfg"
+
+# Default configuration file is config.
+# $BASE_PATH/cfg/config-example will be used if this doesn't exist.
+MY_STATUS_CONFIG="$MY_STATUS_CONFIG_DIR/config"
 
 # List with the configuration. What do we want to monitor?
 MY_HOSTNAME_FILE="$MY_STATUS_CONFIG_DIR/status_hostname_list.txt"
-
-# Where should the HTML status page be stored?
-MY_STATUS_HTML="$HOME/status_index.html"
-
-# Where should the JSON status page be stored? Set to "" to disable JSON output
-MY_STATUS_JSON="$HOME/status.json"
 
 # Text file in which you can place a status message.
 # If the file exists and has a content, all errors on the status page are overwritten.
 MY_MAINTENANCE_TEXT_FILE="$MY_STATUS_CONFIG_DIR/status_maintenance_text.txt"
 
-# Duration we wait for response (nc, curl and traceroute).
+# Shortcut to place the configuration file in a folder.
+# Save it without / at the end.
+MY_STATUS_OUTPUT_DIR="$BASE_PATH/output"
+
+# Where should the HTML status page be stored?
+MY_STATUS_HTML="$MY_STATUS_OUTPUT_DIR/status_index.html"
+
+# Where should the JSON status page be stored? Set to "" to disable JSON output
+MY_STATUS_JSON="$MY_STATUS_OUTPUT_DIR/status.json"
+
+# Duration we wait for response (nc, curl, traceroute and traceroutevpn).
 MY_TIMEOUT="2"
 
 # Duration we wait for response (only ping).
@@ -40,14 +48,15 @@ MY_PING_COUNT="2"
 
 # Route to host
 MY_TRACEROUTE_HOST="1.1.1.1" # Cloudflare DNS
+MY_TRACEROUTE_HOST_VPN="104.16.154.36" # whatismyipaddress.com site (routed through vpn)
 # Sets the number of probe packets per hop
 MY_TRACEROUTE_NQUERIES="1"
 
 # Location for the status files. Please do not edit created files.
-MY_HOSTNAME_STATUS_OK="$MY_STATUS_CONFIG_DIR/status_hostname_ok.txt"
-MY_HOSTNAME_STATUS_DOWN="$MY_STATUS_CONFIG_DIR/status_hostname_down.txt"
-MY_HOSTNAME_STATUS_LASTRUN="$MY_STATUS_CONFIG_DIR/status_hostname_last.txt"
-MY_HOSTNAME_STATUS_HISTORY="$MY_STATUS_CONFIG_DIR/status_hostname_history.txt"
+MY_HOSTNAME_STATUS_OK="$MY_STATUS_OUTPUT_DIR/status_hostname_ok.txt"
+MY_HOSTNAME_STATUS_DOWN="$MY_STATUS_OUTPUT_DIR/status_hostname_down.txt"
+MY_HOSTNAME_STATUS_LASTRUN="$MY_STATUS_OUTPUT_DIR/status_hostname_last.txt"
+MY_HOSTNAME_STATUS_HISTORY="$MY_STATUS_OUTPUT_DIR/status_hostname_history.txt"
 MY_HOSTNAME_STATUS_HISTORY_TEMP_SORT="/tmp/status_hostname_history_sort.txt"
 
 # CSS Stylesheet for the status page
@@ -62,4 +71,5 @@ MY_STATUS_FOOTER='Powered by <a href="https://github.com/Cyclenerd/static_status
 # Lock file to prevent duplicate execution.
 # If this file exists, status.sh script is terminated.
 # If something has gone wrong and the file has not been deleted automatically, you can delete it.
-MY_STATUS_LOCKFILE="/tmp/STATUS_SH_IS_RUNNING.lock"
+MY_STATUS_LOCKFILE="$MY_STATUS_CONFIG_DIR/STATUS_SH_IS_RUNNING.lock"
+ 

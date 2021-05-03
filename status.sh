@@ -1,85 +1,35 @@
 #!/usr/bin/env bash
 
 # status.sh
-# Author: Nils Knieling and Contributors- https://github.com/Cyclenerd/static_status
+# Forked from: Nils Knieling and Contributors- https://github.com/Cyclenerd/static_status
+# Updated by: h0me5k1n - 
 
 # Simple Bash script to generate a status page.
 
 ################################################################################
-#### Configuration Section
+#### Configuration 
 ################################################################################
 
-# Tip: You can also outsource configuration to an extra configuration file.
-#      Just create a file named 'config' at the location of this script.
-#      You can find an example here:
-#      https://github.com/Cyclenerd/static_status/blob/master/config-example
-#      You can also pass a configuration file with the variable MY_STATUS_CONFIG.
+# config variables from the cfg/config-example file are used by default!
+# to use a custom config, copy this file as cfg/config and edit as necessary
 
-# Title for the status page
-MY_STATUS_TITLE="Status Page"
+# the cfg/status_hostname_list-example.txt file is used by default for checks!
+# to use custom checks, copy this file as cfg/status_hostname_list.txt
+# and edit as necessary
 
-# Link for the homepage button
-MY_HOMEPAGE_URL="https://github.com/Cyclenerd/static_status"
+# the cfg/status_maintenance_text-example.txt file is used by default for 
+# maintenance messages!
+# to display custom maintenance messages, create a file called 
+# status_maintenance_text.txt
 
-# Text for the homepage button
-MY_HOMEPAGE_TITLE="Homepage"
-
-# Auto refresh interval in seconds 0 is no refresh
-MY_AUTOREFRESH="0"
-
-# Shortcut to place the configuration file in a folder.
-# Save it without / at the end.
-MY_STATUS_CONFIG_DIR="$HOME/status"
-
-# List with the configuration. What do we want to monitor?
-MY_HOSTNAME_FILE="$MY_STATUS_CONFIG_DIR/status_hostname_list.txt"
-
-# Where should the HTML status page be stored?
-MY_STATUS_HTML="$HOME/status_index.html"
-
-# Where should the JSON status page be stored? Set to "" to disable JSON output
-MY_STATUS_JSON="$HOME/status.json"
-
-# Text file in which you can place a status message.
-# If the file exists and has a content, all errors on the status page are overwritten.
-MY_MAINTENANCE_TEXT_FILE="$MY_STATUS_CONFIG_DIR/status_maintenance_text.txt"
-
-# Duration we wait for response (nc, curl and traceroute).
-MY_TIMEOUT="2"
-
-# Duration we wait for response (only ping).
-MY_PING_TIMEOUT="4"
-MY_PING_COUNT="2"
-
-# Route to host
-MY_TRACEROUTE_HOST="1.1.1.1" # Cloudflare DNS
-# Sets the number of probe packets per hop
-MY_TRACEROUTE_NQUERIES="1"
-
-# Location for the status files. Please do not edit created files.
-MY_HOSTNAME_STATUS_OK="$MY_STATUS_CONFIG_DIR/status_hostname_ok.txt"
-MY_HOSTNAME_STATUS_DOWN="$MY_STATUS_CONFIG_DIR/status_hostname_down.txt"
-MY_HOSTNAME_STATUS_LASTRUN="$MY_STATUS_CONFIG_DIR/status_hostname_last.txt"
-MY_HOSTNAME_STATUS_HISTORY="$MY_STATUS_CONFIG_DIR/status_hostname_history.txt"
-MY_HOSTNAME_STATUS_HISTORY_TEMP_SORT="/tmp/status_hostname_history_sort.txt"
-
-# CSS Stylesheet for the status page
-MY_STATUS_STYLESHEET="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.5.3/css/bootstrap.min.css"
-
-# FontAwesome for the status page
-MY_STATUS_FONTAWESOME="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css"
-
-# A footer
-MY_STATUS_FOOTER='Powered by <a href="https://github.com/Cyclenerd/static_status">static_status</a>'
-
-# Lock file to prevent duplicate execution.
-# If this file exists, status.sh script is terminated.
-# If something has gone wrong and the file has not been deleted automatically, you can delete it.
-MY_STATUS_LOCKFILE="/tmp/STATUS_SH_IS_RUNNING.lock"
+# using the above allows for updating and the potential to persist data when
+# running in docker
 
 ################################################################################
-#### END Configuration Section
+#### END Configuration 
 ################################################################################
+#Timer - used to display the duration up to writing the html footer
+SECONDS=0
 
 ME=$(basename "$0")
 BASE_PATH=$(dirname "$0") # TODO: Resolv symlinks https://stackoverflow.com/questions/59895
@@ -95,12 +45,15 @@ MY_COMMANDS=(
 	curl
 	grep
 	traceroute
+	traceroutevpn
 	sed
 )
 
-# if a config file has been specified with MY_STATUS_CONFIG=myfile use this one, otherwise default to config
-if [[ -z "$MY_STATUS_CONFIG" ]]; then
-	MY_STATUS_CONFIG="$BASE_PATH/config"
+# if a config file hasn't been created use the example/default config
+MY_STATUS_CONFIG="$BASE_PATH/cfg/config"
+if [[ ! -f "$MY_STATUS_CONFIG" ]]; then
+	echo "Using config-example"
+	MY_STATUS_CONFIG="$BASE_PATH/cfg/config-example"
 fi
 
 ################################################################################
@@ -128,16 +81,22 @@ debug_variables() {
 	echo "BASH_VERSION: $BASH_VERSION"
 	echo
 	echo "MY_TIMEOUT: $MY_TIMEOUT"
+	echo "MY_AUTOREFRESH: $MY_AUTOREFRESH"
+	echo "MY_TRACEROUTE_HOST: $MY_TRACEROUTE_HOST"
+	echo "MY_TRACEROUTE_HOST_VPN: $MY_TRACEROUTE_HOST_VPN"
+	echo
 	echo "MY_STATUS_CONFIG: $MY_STATUS_CONFIG"
 	echo "MY_STATUS_CONFIG_DIR: $MY_STATUS_CONFIG_DIR"
 	echo "MY_HOSTNAME_FILE: $MY_HOSTNAME_FILE"
+	echo
+	echo "MY_STATUS_OUTPUT_DIR: $MY_STATUS_OUTPUT_DIR"
 	echo "MY_HOSTNAME_STATUS_OK: $MY_HOSTNAME_STATUS_OK"
 	echo "MY_HOSTNAME_STATUS_DOWN: $MY_HOSTNAME_STATUS_DOWN"
 	echo "MY_HOSTNAME_STATUS_LASTRUN: $MY_HOSTNAME_STATUS_LASTRUN"
 	echo "MY_HOSTNAME_STATUS_HISTORY: $MY_HOSTNAME_STATUS_HISTORY"
-	echo
 	echo "MY_STATUS_HTML: $MY_STATUS_HTML"
 	echo "MY_MAINTENANCE_TEXT_FILE: $MY_MAINTENANCE_TEXT_FILE"
+	echo
 	echo "MY_HOMEPAGE_URL: $MY_HOMEPAGE_URL"
 	echo "MY_HOMEPAGE_TITLE: $MY_HOMEPAGE_TITLE"
 	echo "MY_STATUS_TITLE: $MY_STATUS_TITLE"
@@ -173,7 +132,7 @@ function check_command() {
 # check_config() check if the configuration file is readble
 function check_config() {
 	if [ ! -r "$1" ]; then
-		exit_with_failure "Can not read required configuration file '$1'"
+		exit_with_failure "Cannot read required configuration file '$1'"
 	fi
 }
 
@@ -181,11 +140,23 @@ function check_config() {
 function check_file() {
 	if [ ! -f "$1" ]; then
 		if ! echo > "$1"; then
-			exit_with_failure "Can not create file '$1'"
+			exit_with_failure "Cannot create file '$1'"
 		fi
 	fi
 	if [ ! -w "$1" ]; then
-		exit_with_failure "Can not write file '$1'"
+		exit_with_failure "Cannot write file '$1'"
+	fi
+}
+
+# check_folder() check if the folder exists if not create the folder
+function check_folder() {
+	if [ ! -d "$1" ]; then
+		if ! echo > "$1"; then
+			exit_with_failure "Cannot create folder '$1'"
+		fi
+	fi
+	if [ ! -w "$1" ]; then
+		exit_with_failure "Cannot write folder '$1'"
 	fi
 }
 
@@ -223,7 +194,7 @@ function echo_do_not_edit() {
 # set_lock() sets lock file
 function set_lock() {
 	if ! echo "$MY_DATE_TIME" > "$MY_STATUS_LOCKFILE"; then
-		exit_with_failure "Can not create lock file '$MY_STATUS_LOCKFILE'"
+		exit_with_failure "Cannot create lock file '$MY_STATUS_LOCKFILE'"
 	fi
 }
 
@@ -308,6 +279,7 @@ function check_downtime() {
 		   [[ "$MY_DOWN_COMMAND" = "nc" ]] ||
 		   [[ "$MY_DOWN_COMMAND" = "grep" ]] ||
 		   [[ "$MY_DOWN_COMMAND" = "traceroute" ]] ||
+		   [[ "$MY_DOWN_COMMAND" = "traceroutevpn" ]] ||
 		   [[ "$MY_DOWN_COMMAND" = "curl" ]] ||
 		   [[ "$MY_DOWN_COMMAND" = "http-status" ]] ||
 		   [[ "$MY_DOWN_COMMAND" = "script" ]]; then
@@ -374,7 +346,7 @@ function save_history() {
 		cat "$MY_HOSTNAME_STATUS_HISTORY_TEMP_SORT" >> "$MY_HOSTNAME_STATUS_HISTORY"
 		rm "$MY_HOSTNAME_STATUS_HISTORY_TEMP_SORT" &> /dev/null
 	else
-		exit_with_failure "Can not copy file '$MY_HOSTNAME_STATUS_HISTORY' to '$MY_HOSTNAME_STATUS_HISTORY_TEMP_SORT'"
+		exit_with_failure "Cannot copy file '$MY_HOSTNAME_STATUS_HISTORY' to '$MY_HOSTNAME_STATUS_HISTORY_TEMP_SORT'"
 	fi
 
 	if [[ "$BE_LOUD" = "yes" ]]; then
@@ -415,6 +387,17 @@ function page_header() {
 $MY_AUTOREFRESH_TEXT
 <link rel="stylesheet" href="$MY_STATUS_STYLESHEET">
 <link href="$MY_STATUS_FONTAWESOME" rel="stylesheet">
+<!-- custom styling for specific icons -->
+<style type="text/css">
+	.fa-check {
+		background: white;
+		color: green;
+	}	
+	.fa-times {
+		background: white;
+		color: red;
+	}
+</style>
 </head>
 <body>
 <div class="container">
@@ -442,11 +425,14 @@ EOF
 }
 
 function page_footer() {
+	ELAPSED="$(($SECONDS / 3600))hrs $((($SECONDS / 60) % 60))min $(($SECONDS % 60))sec"
 	cat >> "$MY_STATUS_HTML" << EOF
 <hr class="mt-4">
 <footer>
 	<p>$MY_STATUS_FOOTER</p>
-	<p class="text-muted">$MY_DATE_TIME</p>
+	<p class="text-muted">Last checked at $MY_DATE_TIME - 
+	<i class="fas fa-stopwatch"></i> 
+	Query time of $ELAPSED</p>
 </footer>
 
 </div>
@@ -500,7 +486,7 @@ EOF
 		cat "$MY_MAINTENANCE_TEXT_FILE" >> "$MY_STATUS_HTML"
 	else
 		echo ":-(" >> "$MY_STATUS_HTML"
-		echo_warning "Can not read file '$MY_MAINTENANCE_TEXT_FILE'"
+		echo_warning "Cannot read file '$MY_MAINTENANCE_TEXT_FILE'"
 	fi
 	cat >> "$MY_STATUS_HTML" << EOF
 	</div>
@@ -526,13 +512,15 @@ function item_ok() {
 			echo "Grep for \"$MY_OK_PORT\" on  $MY_OK_HOSTNAME"
 		elif [[ "$MY_OK_COMMAND" = "traceroute" ]]; then
 			echo "Route path contains $MY_OK_HOSTNAME"
+		elif [[ "$MY_OK_COMMAND" = "traceroutevpn" ]]; then
+			echo "Route path via VPN contains $MY_OK_HOSTNAME"
 		elif [[ "$MY_OK_COMMAND" = "script" ]]; then
 			echo "Script $MY_OK_HOSTNAME"
 		fi
 	fi
 
 	cat <<EOF
-	<span class="badge badge-pill badge-dark"><i class="fas fa-check"></i></span>
+	<span class="badge badge-pill badge-light"><i class="fas fa-check"></i></span>
 </li>
 EOF
 }
@@ -555,12 +543,14 @@ function item_down() {
 			echo "Grep for \"$MY_DOWN_PORT\" on  $MY_DOWN_HOSTNAME"
 		elif [[ "$MY_DOWN_COMMAND" = "traceroute" ]]; then
 			echo "Route path contains $MY_DOWN_HOSTNAME"
+		elif [[ "$MY_DOWN_COMMAND" = "traceroutevpn" ]]; then
+			echo "Route path via VPN contains $MY_DOWN_HOSTNAME"
 		elif [[ "$MY_DOWN_COMMAND" = "script" ]]; then
 			echo "Script $MY_DOWN_HOSTNAME"
 		fi
 	fi
 
-	printf '<span class="badge badge-pill badge-dark"><i class="fas fa-times"></i> '
+	printf '<span class="badge badge-pill badge-light"><i class="fas fa-times"></i> '
 	if [[ "$MY_DOWN_TIME" -gt "1" ]]; then
 		printf "%.0f min</span>" "$((MY_DOWN_TIME/60))"
 	else
@@ -588,6 +578,8 @@ function item_history() {
 			echo "Grep for \"$MY_HISTORY_PORT\" on  $MY_HISTORY_HOSTNAME"
 		elif [[ "$MY_HISTORY_COMMAND" = "traceroute" ]]; then
 			echo "Route path contains $MY_HISTORY_HOSTNAME"
+		elif [[ "$MY_HISTORY_COMMAND" = "traceroutevpn" ]]; then
+			echo "Route path via VPN contains $MY_HISTORY_HOSTNAME"
 		elif [[ "$MY_HISTORY_COMMAND" = "script" ]]; then
 			echo "Script $MY_HISTORY_HOSTNAME"
 		fi
@@ -598,7 +590,7 @@ function item_history() {
 	echo '</small>'
 	echo '</span>'
 
-	printf '<span class="badge badge-pill badge-dark"><i class="fas fa-times"></i> '
+	printf '<span class="badge badge-pill badge-light"><i class="fas fa-times"></i> '
 	if [[ "$MY_HISTORY_DOWN_TIME" -gt "1" ]]; then
 		printf "%.0f min</span>" "$((MY_HISTORY_DOWN_TIME/60))"
 	else
@@ -635,11 +627,31 @@ if [ -e "$MY_STATUS_CONFIG" ]; then
 	source "$MY_STATUS_CONFIG"
 fi
 
+# if a status_hostname_list.txt file hasn't been created use the status_hostname_list-example.txt
+if [[ ! -f "$MY_HOSTNAME_FILE" ]]; then
+	echo "Using status_hostname_list-example.txt"
+	MY_HOSTNAME_FILE="$BASE_PATH/cfg/status_hostname_list-example.txt"
+else
+	echo "Using $MY_HOSTNAME_FILE"
+fi
+# if a status_maintenance_text-example.txt file hasn't been created use the status_maintenance_text-example.txt
+if [[ ! -f "$MY_MAINTENANCE_TEXT_FILE" ]]; then
+	echo "Using status_maintenance_text-example.txt"
+	MY_MAINTENANCE_TEXT_FILE="$BASE_PATH/cfg/status_maintenance_text-example.txt"
+else
+	echo "Using $MY_MAINTENANCE_TEXT_FILE"
+fi
+
 check_bash
 
 for MY_COMMAND in "${MY_COMMANDS[@]}"; do
-	check_command "$MY_COMMAND"
+	if [[ "$MY_COMMAND" = "traceroutevpn" ]]; then
+		echo "$MY_COMMAND is a custom scripted command. Not an internal command"
+	else
+		check_command "$MY_COMMAND"
+	fi
 done
+
 
 check_lock
 set_lock
@@ -649,11 +661,14 @@ check_file "$MY_HOSTNAME_STATUS_LASTRUN"
 check_file "$MY_HOSTNAME_STATUS_HISTORY"
 check_file "$MY_HOSTNAME_STATUS_HISTORY_TEMP_SORT"
 check_file "$MY_STATUS_HTML"
+check_folder "cfg"
+check_folder "cfg/scripts"
+check_folder "output"
 
 if cp "$MY_HOSTNAME_STATUS_DOWN" "$MY_HOSTNAME_STATUS_LASTRUN"; then
 	get_lastrun_time
 else
-	exit_with_failure "Can not copy file '$MY_HOSTNAME_STATUS_DOWN' to '$MY_HOSTNAME_STATUS_LASTRUN'"
+	exit_with_failure "Cannot copy file '$MY_HOSTNAME_STATUS_DOWN' to '$MY_HOSTNAME_STATUS_LASTRUN'"
 fi
 
 {
@@ -717,7 +732,7 @@ while IFS=';' read -r MY_COMMAND MY_HOSTNAME_STRING MY_PORT || [[ -n "$MY_COMMAN
 		fi
 	elif [[ "$MY_COMMAND" = "curl" ]]; then
 		(( MY_HOSTNAME_COUNT++ ))
-		if curl -If --max-time "$MY_TIMEOUT" "$MY_HOSTNAME" &> /dev/null; then
+		if curl -If -L --max-time "$MY_TIMEOUT" "$MY_HOSTNAME" &> /dev/null; then
 			check_downtime "$MY_COMMAND" "$MY_HOSTNAME_STRING" ""
 			# Check status change
 			if [[ "$MY_DOWN_TIME" -gt "0" ]]; then
@@ -730,7 +745,7 @@ while IFS=';' read -r MY_COMMAND MY_HOSTNAME_STRING MY_PORT || [[ -n "$MY_COMMAN
 		fi
 	elif [[ "$MY_COMMAND" = "http-status" ]]; then
 		(( MY_HOSTNAME_COUNT++))
-		if [[ $(curl -s -o /dev/null -I --max-time "$MY_TIMEOUT" -w "%{http_code}" "$MY_HOSTNAME" 2>/dev/null) == "$MY_PORT" ]]; then
+		if [[ $(curl -s -L -o /dev/null -I --max-time "$MY_TIMEOUT" -w "%{http_code}" "$MY_HOSTNAME" 2>/dev/null) == "$MY_PORT" ]]; then
 			check_downtime "$MY_COMMAND" "$MY_HOSTNAME_STRING" "$MY_PORT"
 			# Check status change
 			if [[ "$MY_DOWN_TIME" -gt "0" ]]; then
@@ -743,7 +758,7 @@ while IFS=';' read -r MY_COMMAND MY_HOSTNAME_STRING MY_PORT || [[ -n "$MY_COMMAN
 		fi
 	elif [[ "$MY_COMMAND" = "grep" ]]; then
 		(( MY_HOSTNAME_COUNT++ ))
-		if curl --no-buffer -fs --max-time "$MY_TIMEOUT" "$MY_HOSTNAME" | grep -q "$MY_PORT"  &> /dev/null; then
+		if curl -L --no-buffer -fs --max-time "$MY_TIMEOUT" "$MY_HOSTNAME" | grep -q "$MY_PORT"  &> /dev/null; then
 			check_downtime "$MY_COMMAND" "$MY_HOSTNAME_STRING" "$MY_PORT"
 			# Check status change
 			if [[ "$MY_DOWN_TIME" -gt "0" ]]; then
@@ -758,6 +773,20 @@ while IFS=';' read -r MY_COMMAND MY_HOSTNAME_STRING MY_PORT || [[ -n "$MY_COMMAN
 		(( MY_HOSTNAME_COUNT++ ))
 		MY_PORT=${MY_PORT:=64}
 		if traceroute -w "$MY_TIMEOUT" -q "$MY_TRACEROUTE_NQUERIES" -m "$MY_PORT" "$MY_TRACEROUTE_HOST" | grep -q "$MY_HOSTNAME"  &> /dev/null; then
+			check_downtime "$MY_COMMAND" "$MY_HOSTNAME_STRING" "$MY_PORT"
+			# Check status change
+			if [[ "$MY_DOWN_TIME" -gt "0" ]]; then
+				save_history  "$MY_COMMAND" "$MY_HOSTNAME_STRING" "$MY_PORT" "$MY_DOWN_TIME" "$MY_DATE_TIME"
+			fi
+			save_availability "$MY_COMMAND" "$MY_HOSTNAME_STRING" "$MY_PORT"
+		else
+			check_downtime "$MY_COMMAND" "$MY_HOSTNAME_STRING" "$MY_PORT"
+			save_downtime "$MY_COMMAND" "$MY_HOSTNAME_STRING" "$MY_PORT" "$MY_DOWN_TIME"
+		fi
+	elif [[ "$MY_COMMAND" = "traceroutevpn" ]]; then
+		(( MY_HOSTNAME_COUNT++ ))
+		MY_PORT=${MY_PORT:=64}
+		if traceroute -w "$MY_TIMEOUT" -q "$MY_TRACEROUTE_NQUERIES" -m "$MY_PORT" "$MY_TRACEROUTE_HOST_VPN" | grep -q "$MY_HOSTNAME"  &> /dev/null; then
 			check_downtime "$MY_COMMAND" "$MY_HOSTNAME_STRING" "$MY_PORT"
 			# Check status change
 			if [[ "$MY_DOWN_TIME" -gt "0" ]]; then
@@ -810,7 +839,8 @@ while IFS=';' read -r MY_DOWN_COMMAND MY_DOWN_HOSTNAME_STRING MY_DOWN_PORT MY_DO
 	   [[ "$MY_DOWN_COMMAND" = "http-status" ]] ||
 	   [[ "$MY_DOWN_COMMAND" = "grep" ]] ||
 	   [[ "$MY_DOWN_COMMAND" = "script" ]] ||
-	   [[ "$MY_DOWN_COMMAND" = "traceroute" ]]; then
+	   [[ "$MY_DOWN_COMMAND" = "traceroute" ]] ||
+	   [[ "$MY_DOWN_COMMAND" = "traceroutevpn" ]]; then
 		MY_DOWN_HOSTNAME="${MY_DOWN_HOSTNAME_STRING%%|*}"
 		MY_DISPLAY_TEXT="${MY_DOWN_HOSTNAME_STRING/${MY_DOWN_HOSTNAME}/}"
 		MY_DISPLAY_TEXT="${MY_DISPLAY_TEXT:1}"
@@ -832,7 +862,8 @@ while IFS=';' read -r MY_OK_COMMAND MY_OK_HOSTNAME_STRING MY_OK_PORT || [[ -n "$
 	   [[ "$MY_OK_COMMAND" = "http-status" ]] ||
 	   [[ "$MY_OK_COMMAND" = "grep" ]] ||
 	   [[ "$MY_OK_COMMAND" = "script" ]] ||
-	   [[ "$MY_OK_COMMAND" = "traceroute" ]]; then
+	   [[ "$MY_OK_COMMAND" = "traceroute" ]] ||
+	   [[ "$MY_OK_COMMAND" = "traceroutevpn" ]]; then
 		MY_OK_HOSTNAME="${MY_OK_HOSTNAME_STRING%%|*}"
 		MY_DISPLAY_TEXT="${MY_OK_HOSTNAME_STRING/${MY_OK_HOSTNAME}/}"
 		MY_DISPLAY_TEXT="${MY_DISPLAY_TEXT:1}"
@@ -912,7 +943,8 @@ while IFS=';' read -r MY_HISTORY_COMMAND MY_HISTORY_HOSTNAME_STRING MY_HISTORY_P
 	   [[ "$MY_HISTORY_COMMAND" = "http-status" ]] ||
 	   [[ "$MY_HISTORY_COMMAND" = "grep" ]] ||
 	   [[ "$MY_HISTORY_COMMAND" = "script" ]] ||
-	   [[ "$MY_HISTORY_COMMAND" = "traceroute"  ]]; then
+	   [[ "$MY_HISTORY_COMMAND" = "traceroute"  ]] ||
+	   [[ "$MY_HISTORY_COMMAND" = "traceroutevpn"  ]]; then
 		MY_HISTORY_HOSTNAME="${MY_HISTORY_HOSTNAME_STRING%%|*}"
 		MY_DISPLAY_TEXT="${MY_HISTORY_HOSTNAME_STRING/${MY_HISTORY_HOSTNAME}/}"
 		MY_DISPLAY_TEXT="${MY_DISPLAY_TEXT:1}"

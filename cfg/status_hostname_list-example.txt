@@ -74,3 +74,4 @@ traceroute;your.secret.router|My secret Hostname;2
 #
 script;./check.sh|My secret Name
 script;/bin/true|always up
+script;cfg/scripts/google_downdetector.py|Google Status on DownDetector
