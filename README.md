@@ -1,56 +1,28 @@
-# status.sh
+forked from (<https://github.com/Cyclenerd/static_shell>).
 
-[![Build Status](https://travis-ci.org/Cyclenerd/static_status.svg?branch=master)](https://travis-ci.org/Cyclenerd/static_status)
+# status.sh
 
 Simple Bash script to generate a static status page. Displays status of websites, services (HTTP, SAP, MySQL...) and ping. Everything easy to customize. 🤓
 
 You can also easily check more complicated things with this script.
 For example if a text is present in a web page or if a host appears in the route path (traceroute).
-Checking the route path is useful, for instance, if you have a backup mobile internet connection in addition to your cable connection.
+Checking the route path is useful, for instance, if you have a backup mobile internet connection in addition to your cable connection or selective vpn routing.
+
+This fork has a different file and folder arrangement, an addition of a traceroutevpn command (that can check the route to a second ip address) and different css for the icons used in the html page.
 
 ![Screenshot](images/Status-Page-Past-Incidents.jpg)
 
 ## Installation
 
-Download Bash script `status.sh`:
+Clone the repo
 
-```shell
-curl \
-  -f "https://raw.githubusercontent.com/Cyclenerd/static_status/master/status.sh" \
-  -o "status.sh"
-```
-
-Download configuration file `status_hostname_list.txt`:
-
-```shell
-curl \
-  -f "https://raw.githubusercontent.com/Cyclenerd/static_status/master/status_hostname_list.txt" \
-  -o "status_hostname_list.txt"
-```
-
-Customize the `status_hostname_list.txt` configuration file and define what you want to monitor:
-
-```shell
-vi "status_hostname_list.txt"
-```
+Create a file called `cfg/status_hostname_list.txt` with details of the checks to be performed. This can be done by copying the `cfg/status_hostname_list-example.txt` file. The script will work immediately and will use example configuration.
 
 ### Optional
 
-Edit the script `status.sh` or better add more configuration to the configuration file `config`:
+Copy the file called `cfg/config-example` as `cfg/config` and edit the variables as required.
 
-Download example configuration file:
-
-```shell
-curl \
-  -f "https://raw.githubusercontent.com/Cyclenerd/static_status/master/config-example" \
-  -o "config"
-```
-
-Customize configuration file:
-
-```
-nano "config"
-```
+Places scripts in the `cfg/scripts` folder.
 
 ### Run
 
@@ -86,10 +58,7 @@ Add:
 */1 * * * * bash "/path/to/status.sh" silent >> /dev/null
 ```
 
-## Demo
-
-This [demo page](https://cyclenerd.github.io/static_status/) is generated with [GitHub Action](https://github.com/Cyclenerd/static_status/blob/master/.github/workflows/main.yml):
-<https://cyclenerd.github.io/static_status/>
+The files created by the script will be written to the `output` folder (unless changed in the `cfg/config-example` file or - if created - the `cfg/config` file).
 
 ### Screenshots
 
@@ -137,7 +106,9 @@ sudo apt install curl iputils-ping traceroute netcat-openbsd grep sed
 
 ## TODO
 
-* More and better documentation
+* More and better documentation - new traceroutevpn command 
+* update screenshots
+* create dockerfile for running in a container
 
 Help is welcome 👍
 
