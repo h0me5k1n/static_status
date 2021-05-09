@@ -63,9 +63,8 @@ The files created by the script will be written to the `output` folder (unless c
 ### Screenshots
 
 ![Screenshot](images/Status-Page-Maintenance.png)
-![Screenshot](images/Status-Page-OK.jpg)
-![Screenshot](images/Status-Page-Outage.jpg)
-![Screenshot](images/Status-Page-Major_Outage.jpg)
+![Screenshot](images/Status-Page-OK.png)
+![Screenshot](images/Status-Page-Outage.png)
 ![Screenshot](images/Status-Page-Past-Incidents.jpg)
 
 ## Custom Text
